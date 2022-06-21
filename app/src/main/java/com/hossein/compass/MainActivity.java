@@ -13,7 +13,6 @@ public class MainActivity extends AppCompatActivity {
     private Compass compass;
     private float currentAzimuth;
     float currentDegree;
-
     ImageView arrow;
 
     @Override
@@ -23,8 +22,9 @@ public class MainActivity extends AppCompatActivity {
         init();
         setupCompass();
     }
-    public void init(){
-        arrow=findViewById(R.id.arrow);
+
+    public void init() {
+        arrow = findViewById(R.id.arrow);
     }
 
     private void adjustArrow(float azimuth) {

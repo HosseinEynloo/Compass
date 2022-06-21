@@ -6,6 +6,9 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.util.Log;
+import android.view.Surface;
+import android.view.WindowManager;
+
 
 public class Compass implements SensorEventListener {
 
@@ -29,37 +32,34 @@ public class Compass implements SensorEventListener {
     private float[] I = new float[9];
 
     private float azimuth;
+    private float mPitchDegrees;
+    private float mRollDegrees;
+
     private float azimuthFix;
 
-    boolean combineGravityMagnetic=false;
+    boolean combineGravityMagnetic = false;
 
     public Compass(Context context) {
-
-
         sensorManager = (SensorManager) context
                 .getSystemService(Context.SENSOR_SERVICE);
         gsensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
         msensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
         osensor = sensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION);
         grsensor = sensorManager.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR);
-
-
     }
 
     public void start() {
-        boolean accler=sensorManager.registerListener(this, gsensor,
+        boolean accler = sensorManager.registerListener(this, gsensor,
                 SensorManager.SENSOR_DELAY_GAME);
-        boolean magnetic=sensorManager.registerListener(this, msensor,
+        boolean magnetic = sensorManager.registerListener(this, msensor,
                 SensorManager.SENSOR_DELAY_GAME);
         sensorManager.registerListener(this, osensor,
                 SensorManager.SENSOR_DELAY_GAME);
         sensorManager.registerListener(this, grsensor,
                 SensorManager.SENSOR_DELAY_GAME);
-
-        if (accler && magnetic){
-            combineGravityMagnetic=true;
+        if (accler && magnetic) {
+            combineGravityMagnetic = true;
         }
-
     }
 
     public void stop() {
@@ -83,7 +83,6 @@ public class Compass implements SensorEventListener {
         final float alpha = 0.97f;
 
         synchronized (this) {
-
             if (combineGravityMagnetic) {
                 Log.i("TypeeeSensor", "onSensorChanged: TYPE_ACCELEROMETER or TYPE_MAGNETIC_FIELD");
                 if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
@@ -99,7 +98,6 @@ public class Compass implements SensorEventListener {
 
                     // Log.e(TAG, Float.toString(mGravity[0]));
                 }
-
                 if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
                     // mGeomagnetic = event.values;
 
@@ -115,11 +113,18 @@ public class Compass implements SensorEventListener {
 
                 boolean success = SensorManager.getRotationMatrix(R, I, mGravity,
                         mGeomagnetic);
+
+
                 if (success) {
-                    float orientation[] = new float[3];
-                    SensorManager.getOrientation(R, orientation);
+
+                    SensorManager.getOrientation(R, mOrintation);
                     // Log.d(TAG, "azimuth (rad): " + azimuth);
-                    azimuth = (float) Math.toDegrees(orientation[0]); // orientation
+                    azimuth = (float) Math.toDegrees(mOrintation[0]); // orientation
+
+                    // Orientation Handling
+                    manageOrientation(mOrintation);
+
+
                     azimuth = (azimuth + azimuthFix + 360) % 360;
                     // Log.d(TAG, "azimuth (deg): " + azimuth);
                     if (listener != null) {
@@ -139,6 +144,9 @@ public class Compass implements SensorEventListener {
 
 
                 azimuth = (float) Math.toDegrees(mOrintation[0]);
+
+                // Orientation Handling
+                manageOrientation(mOrintation);
                 azimuth = (azimuth + azimuthFix + 360) % 360;
                 if (listener != null) {
                     listener.onNewAzimuth(azimuth);
@@ -156,15 +164,20 @@ public class Compass implements SensorEventListener {
                 mGameRotate[2] = alpha * mGameRotate[2] + (1 - alpha)
                         * event.values[2];
 
-                float orientation[] = new float[3];
 
 //                // Convert the rotation-vector to a 4x4 matrix.
                 SensorManager.getRotationMatrixFromVector(R, event.values);
-                SensorManager.remapCoordinateSystem(R, SensorManager.AXIS_X, SensorManager.AXIS_Z, R);
-                SensorManager.getOrientation(R, orientation);
+                SensorManager.remapCoordinateSystem(R, SensorManager.AXIS_X, SensorManager.AXIS_Y, R);
+                SensorManager.getOrientation(R, mOrintation);
 
-                azimuth = (float) Math.toDegrees(orientation[0]); // orientation
-//                azimuth = (azimuth + azimuthFix + 360) % 360;
+                azimuth = (float) Math.toDegrees(mOrintation[0]); // orientation
+
+                azimuth = azimuth - 45;
+
+
+                // Orientation Handling
+                manageOrientation(mOrintation);
+                azimuth = (azimuth + azimuthFix + 360) % 360;
 
                 if (listener != null) {
                     listener.onNewAzimuth(azimuth);
@@ -177,5 +190,36 @@ public class Compass implements SensorEventListener {
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
+    }
+
+    public void manageOrientation(float[] orientation) {
+        final int screenRotation = (((WindowManager) App.getContext().getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay()).getRotation();
+
+        if (screenRotation == Surface.ROTATION_0) {
+            mPitchDegrees = (float) Math.toDegrees(orientation[1]);
+            mRollDegrees = (float) Math.toDegrees(orientation[2]);
+            if (mRollDegrees >= 90 || mRollDegrees <= -90) {
+                azimuth += 180;
+                mPitchDegrees = mPitchDegrees > 0 ? 180 - mPitchDegrees : -180 - mPitchDegrees;
+                mRollDegrees = mRollDegrees > 0 ? 180 - mRollDegrees : -180 - mRollDegrees;
+            }
+        } else if (screenRotation == Surface.ROTATION_90) {
+            azimuth += 90;
+            mPitchDegrees = (float) Math.toDegrees(orientation[2]);
+            mRollDegrees = (float) -Math.toDegrees(orientation[1]);
+        } else if (screenRotation == Surface.ROTATION_180) {
+            azimuth += 180;
+            mPitchDegrees = (float) -Math.toDegrees(orientation[1]);
+            mRollDegrees = (float) -Math.toDegrees(orientation[2]);
+            if (mRollDegrees >= 90 || mRollDegrees <= -90) {
+                azimuth += 180;
+                mPitchDegrees = mPitchDegrees > 0 ? 180 - mPitchDegrees : -180 - mPitchDegrees;
+                mRollDegrees = mRollDegrees > 0 ? 180 - mRollDegrees : -180 - mRollDegrees;
+            }
+        } else if (screenRotation == Surface.ROTATION_270) {
+            azimuth += 270;
+            mPitchDegrees = (float) -Math.toDegrees(orientation[2]);
+            mRollDegrees = (float) Math.toDegrees(orientation[1]);
+        }
     }
 }
